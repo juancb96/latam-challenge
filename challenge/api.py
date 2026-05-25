@@ -9,18 +9,17 @@ from typing import List
 from challenge.model import DelayModel
 
 
-model = DelayModel()
-
-# Train model at import time using the packaged training data.
-# Path is resolved relative to this file so it works regardless of CWD.
-_data_path = Path(__file__).parent.parent / "data" / "data.csv"
-if _data_path.exists():
-    _data = pd.read_csv(_data_path)
-    _features, _target = model.preprocess(_data, target_column="delay")
-    model.fit(_features, _target)
-
-
 app = fastapi.FastAPI()
+
+# Module-level reference so route handlers can reach the model without
+# dependency injection. Read-only after startup — no concurrency risk.
+model: DelayModel = None
+
+
+@app.on_event("startup")
+async def startup():
+    global model
+    model = DelayModel.load(Path(__file__).parent / "model.pkl")
 
 
 class Flight(BaseModel):

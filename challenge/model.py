@@ -1,6 +1,8 @@
+import joblib
 import numpy as np
 import pandas as pd
 
+from pathlib import Path
 from typing import Tuple, Union, List
 from sklearn.linear_model import LogisticRegression
 
@@ -105,3 +107,12 @@ class DelayModel:
             (List[int]): predicted targets.
         """
         return [int(p) for p in self._model.predict(features)]
+
+    def save(self, path: Path) -> None:
+        joblib.dump(self._model, path)
+
+    @classmethod
+    def load(cls, path: Path) -> "DelayModel":
+        instance = cls()
+        instance._model = joblib.load(path)
+        return instance
