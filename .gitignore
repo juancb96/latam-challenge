@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+
+# Test & coverage artifacts
+.pytest_cache/
+.coverage
+reports/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Claude Code / tooling
+.claude/
+.codemie/
+
+# BMAD
+_bmad/
+_bmad-output/
+
+# macOS
+.DS_Store
