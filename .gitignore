@@ -17,14 +17,6 @@ reports/
 # Jupyter
 .ipynb_checkpoints/
 
-# Claude Code / tooling
-.claude/
-.codemie/
-
-# BMAD
-_bmad/
-_bmad-output/
-
 # Serialized model artifact (generated at build time, not versioned)
 challenge/model.pkl
 
