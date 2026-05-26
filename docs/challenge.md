@@ -62,6 +62,14 @@ The serialization lifecycle:
 
 Cloud Run is a fully managed serverless container platform — no VM provisioning, no Kubernetes. It scales to zero (no idle costs) and scales out under load automatically. The container image is stored in Artifact Registry and pulled by Cloud Run at deploy time.
 
+### Cost Protection
+
+Three layers prevent runaway spend from bad actors:
+
+1. **Max instances cap** — `--max-instances 1` on Cloud Run limits scaling to a single container. Sufficient for a challenge/demo; eliminates horizontal scale-out cost entirely.
+2. **API key auth** — `X-Api-Key` header required on `/predict` in production (`API_KEY` env var). Random internet traffic gets 403.
+3. **GCP billing budget** — Console → Billing → Budgets & alerts → Create budget. Set a dollar cap (e.g. $10), enable alerts at 50%/90%/100%, and optionally link a budget action to disable billing automatically.
+
 ### Prerequisites
 
 1. Install [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (`gcloud`)
@@ -116,8 +124,13 @@ gcloud run deploy ${CLOUD_RUN_SERVICE} \
   --allow-unauthenticated \
   --port 8080 \
   --memory 512Mi \
-  --cpu 1
+  --cpu 1 \
+  --max-instances 1 \
+  --concurrency 80 \
+  --set-env-vars API_KEY=${API_KEY}
 ```
+
+`--max-instances 1` limits scaling to a single container — sufficient for a challenge/demo, eliminates horizontal scale-out cost entirely. `API_KEY` is injected as an env var; the app skips auth if it is unset (safe for local dev and CI tests).
 
 The command outputs the service URL. Update `STRESS_URL` in `Makefile` line 26 with that URL, then run `make stress-test`.
 
