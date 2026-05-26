@@ -25,5 +25,11 @@ reports/
 _bmad/
 _bmad-output/
 
+# Serialized model artifact (generated at build time, not versioned)
+challenge/model.pkl
+
+# Environment variables (contain secrets — never commit)
+.env
+
 # macOS
 .DS_Store

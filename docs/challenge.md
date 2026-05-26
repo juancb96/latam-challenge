@@ -43,3 +43,117 @@ FEATURES_COLS = [
 ```
 
 Airline identity (OPERA) and month (MES) dominate. International flight type (TIPOVUELO_I) contributes. Reducing from 37 to 10 features does not degrade performance and improves inference speed.
+
+## Model Serialization
+
+The trained model is serialized with `joblib` rather than `pickle`. Both work, but `joblib` is the sklearn-recommended convention because it uses compressed numpy binary format under the hood — more efficient for the numpy arrays (coefficients, intercepts) stored inside fitted sklearn estimators. For a `LogisticRegression` on 10 features the size difference is negligible, but `joblib` is used as the idiomatic choice with zero extra dependency cost (it ships with `scikit-learn`).
+
+The serialization lifecycle:
+
+1. `train_model.py` — loads `data/data.csv`, runs `preprocess` + `fit`, saves `challenge/model.pkl`
+2. `Dockerfile` (trainer stage) — runs `train_model.py` at build time; `data/data.csv` never enters the runtime image
+3. `challenge/api.py` — loads `model.pkl` at server startup via `@app.on_event("startup")`
+
+`challenge/model.pkl` is excluded from version control (`.gitignore`). It is a build artifact, not source.
+
+## GCP Deployment
+
+### Architecture
+
+Cloud Run is a fully managed serverless container platform — no VM provisioning, no Kubernetes. It scales to zero (no idle costs) and scales out under load automatically. The container image is stored in Artifact Registry and pulled by Cloud Run at deploy time.
+
+### Cost Protection
+
+Three layers prevent runaway spend from bad actors:
+
+1. **Max instances cap** — `--max-instances 1` on Cloud Run limits scaling to a single container. Sufficient for a challenge/demo; eliminates horizontal scale-out cost entirely.
+2. **API key auth** — `X-Api-Key` header required on `/predict` in production (`API_KEY` env var). Random internet traffic gets 403.
+3. **GCP billing budget** — Console → Billing → Budgets & alerts → Create budget. Set a dollar cap (e.g. $10), enable alerts at 50%/90%/100%, and optionally link a budget action to disable billing automatically.
+
+### Prerequisites
+
+1. Install [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (`gcloud`)
+2. Install [Docker](https://docs.docker.com/get-docker/) (or Colima on macOS: `brew install colima docker`)
+3. Create a GCP project at https://console.cloud.google.com
+
+### One-Time Setup
+
+```bash
+# Authenticate
+gcloud auth login
+gcloud auth configure-docker ${GCP_REGION}-docker.pkg.dev
+
+# Set project
+gcloud config set project ${GCP_PROJECT_ID}
+
+# Enable required APIs
+gcloud services enable \
+  run.googleapis.com \
+  artifactregistry.googleapis.com \
+  cloudbuild.googleapis.com
+
+# Create Artifact Registry repository
+gcloud artifacts repositories create ${AR_REPO} \
+  --repository-format=docker \
+  --location=${GCP_REGION}
+```
+
+### Build and Push
+
+```bash
+# Load env vars
+source .env
+
+# Build image (multi-stage: trainer → runtime)
+docker build \
+  -t ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO}/${IMAGE_NAME}:latest \
+  .
+
+# Push to Artifact Registry
+docker push \
+  ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO}/${IMAGE_NAME}:latest
+```
+
+### Deploy to Cloud Run
+
+```bash
+gcloud run deploy ${CLOUD_RUN_SERVICE} \
+  --image ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO}/${IMAGE_NAME}:latest \
+  --platform managed \
+  --region ${GCP_REGION} \
+  --allow-unauthenticated \
+  --port 8080 \
+  --memory 512Mi \
+  --cpu 1 \
+  --max-instances 1 \
+  --concurrency 80 \
+  --set-env-vars API_KEY=${API_KEY}
+```
+
+`--max-instances 1` limits scaling to a single container — sufficient for a challenge/demo, eliminates horizontal scale-out cost entirely. `API_KEY` is injected as an env var; the app skips auth if it is unset (safe for local dev and CI tests).
+
+The command outputs the service URL. Update `STRESS_URL` in `Makefile` line 26 with that URL, then run `make stress-test`.
+
+### Verify Deployment
+
+```bash
+curl https://<service-url>/health
+# {"status":"OK"}
+
+curl -X POST https://<service-url>/predict \
+  -H "Content-Type: application/json" \
+  -d '{"flights":[{"OPERA":"Grupo LATAM","TIPOVUELO":"N","MES":3}]}'
+# {"predict":[0]}
+```
+
+### Environment Variables
+
+All GCP-specific values live in `.env` (gitignored). `.env.example` documents required variables:
+
+| Variable | Description |
+|---|---|
+| `GCP_PROJECT_ID` | GCP project ID |
+| `GCP_REGION` | Region for Artifact Registry + Cloud Run (e.g. `us-central1`) |
+| `AR_REPO` | Artifact Registry repository name |
+| `IMAGE_NAME` | Docker image name |
+| `CLOUD_RUN_SERVICE` | Cloud Run service name |
