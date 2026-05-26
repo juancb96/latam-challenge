@@ -22,9 +22,24 @@ jobs:
 
       - name: Build and push image via Cloud Build
         run: |
-          gcloud builds submit \
+          BUILD_ID=$(gcloud builds submit \
             --tag ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.AR_REPO }}/${{ vars.IMAGE_NAME }}:${{ github.sha }} \
-            --project ${{ vars.GCP_PROJECT_ID }}
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --async \
+            --format='value(id)')
+          echo "Build submitted: $BUILD_ID"
+          while true; do
+            STATUS=$(gcloud builds describe "$BUILD_ID" \
+              --project ${{ vars.GCP_PROJECT_ID }} \
+              --format='value(status)')
+            echo "Status: $STATUS"
+            case $STATUS in
+              SUCCESS) echo "Build succeeded"; break ;;
+              FAILURE|CANCELLED|TIMEOUT|EXPIRED)
+                echo "Build failed with status: $STATUS"; exit 1 ;;
+              *) sleep 15 ;;
+            esac
+          done
 
       - name: Deploy to Cloud Run
         run: |
