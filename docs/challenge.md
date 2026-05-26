@@ -129,10 +129,10 @@ gcloud run deploy ${CLOUD_RUN_SERVICE} \
 ### Verify
 
 ```bash
-curl https://latam-challenge-api-719722839892.us-central1.run.app/health
+curl https://<service-url>/health
 # {"status":"OK"}
 
-curl -X POST https://latam-challenge-api-719722839892.us-central1.run.app/predict \
+curl -X POST https://<service-url>/predict \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: <api_key>" \
   -d '{"flights":[{"OPERA":"Grupo LATAM","TIPOVUELO":"N","MES":3}]}'
